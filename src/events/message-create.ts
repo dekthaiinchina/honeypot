@@ -170,7 +170,10 @@ const onMessage = async (
             // server owner cannot be banned/kicked by anyone
             failed = true;
         };
-        if (!failed && !isOwner) await db.logModerateEvent(guildId, userId);
+        if (!failed && !isOwner) {
+            await db.logModerateEvent(guildId, userId);
+            redis?.publish("moderate_event", "");
+        }
 
         try {
             if (config.log_channel_id && !failed && !isOwner) {

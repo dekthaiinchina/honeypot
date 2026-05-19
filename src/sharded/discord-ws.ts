@@ -20,7 +20,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const getRedis = () => new Bun.RedisClient(process.env.REDIS_URL!)
 const redis = getRedis();
-const redisBlocking = getRedis(); // separate connection for blocking so it doesnt interfere with the main one
+const redisPubSub = getRedis();
 const rest = new REST().setToken(token!);
 
 const getShards = async () => (await rest.get(Routes.gatewayBot()) as RESTGetAPIGatewayBotResult).shards;
@@ -92,27 +92,21 @@ const dispatchEvent = async (id: number, event: GatewayDispatchPayload, shardId:
 manager.addListener(WebSocketShardEvents.Dispatch, dispatchEvent.bind(null, reshardedId));
 
 let wsConfig = {} as { events?: Set<string>, messageEvents?: { sendBotEvents?: boolean } };
-(async () => {
-    const raw = await redis.get("discord_ws_config")
-    if (raw) {
-        const _wsConfig = JSON.parse(raw)
-        wsConfig = {
-            events: new Set(_wsConfig.events),
-            messageEvents: _wsConfig.messageEvents,
-        };
-    }
-
-    while (1) {
-        const raw = await redisBlocking.blpop("discord_ws_config_", 0)
-        if (raw) {
-            const _wsConfig = JSON.parse(raw[1])
-            wsConfig = {
-                events: new Set(_wsConfig.events),
-                messageEvents: _wsConfig.messageEvents,
-            };
-        }
-    }
-})();
+redisPubSub.subscribe("discord_ws_config", async (message) => {
+    const _wsConfig = JSON.parse(message);
+    wsConfig = {
+        events: new Set(_wsConfig.events),
+        messageEvents: _wsConfig.messageEvents,
+    };
+});
+redis.get("discord_ws_config").then((raw) => {
+    if (!raw) return;
+    const _wsConfig = JSON.parse(raw)
+    wsConfig = {
+        events: new Set(_wsConfig.events),
+        messageEvents: _wsConfig.messageEvents,
+    };
+})
 
 
 function shouldBroadcastEvent(event: GatewayDispatchPayload): boolean | Promise<boolean> {

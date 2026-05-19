@@ -72,6 +72,52 @@ services:
        restart_policy:
          condition: any
 
+   stats-api:
+     image: ghcr.io/riskymh/honeypot-stats:latest
+     build: 
+       context: .
+       dockerfile: Dockerfile.stats
+     restart: unless-stopped
+     init: true
+     depends_on:
+       - redis
+     environment:
+       DATABASE_URL: ${DATABASE_URL:-sqlite:///data/honeypot.sqlite}
+       DATABASE_READONLY: true
+       NODE_ENV: production
+       FORCE_COLOR: 1
+       REDIS_URL: redis+unix:///redis/redis.sock
+       REPLICA_ID: '{{.Task.Slot}}'
+       REPLICA_COUNT: ${STATS_REPLICAS:-1}
+       PORT: 3000
+     ports:
+        - "${STATS_PORT:-3000}:3000"
+     volumes:
+        - data:/data
+        - redis:/redis
+     stop_grace_period: 20s
+     healthcheck:
+       test: ["CMD", "curl", "-f", "http://localhost:3000"]
+       interval: 30s
+       timeout: 5s
+       retries: 3
+       start_period: 10s
+     deploy:
+       replicas: ${STATS_REPLICAS:-1}
+       resources:
+         limits:
+           memory: 35M
+           cpu: 0.5
+         reservations:
+           memory: 10M
+       update_config:
+         order: start-first
+         failure_action: rollback
+         max_failure_ratio: 0
+         monitor: 5s
+       restart_policy:
+         condition: any
+
    redis:
     image: redis:8.6.2-alpine3.23
     restart: unless-stopped

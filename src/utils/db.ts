@@ -9,7 +9,9 @@ export type HoneypotConfig = {
   experiments: ("no-warning-msg" | "no-dm" | "random-channel-name" | "random-channel-name-chaos" | "channel-warmer" | "forward-message")[]
 };
 
-export const db = new SQL(process.env.DATABASE_URL || "sqlite://honeypot.sqlite");
+export const db = new SQL(process.env.DATABASE_URL || "sqlite://honeypot.sqlite", {
+  readonly: process.env.DATABASE_READONLY === "true",
+});
 
 export async function initDb() {
   await db.unsafe("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;").catch(() => { });
@@ -112,6 +114,36 @@ export async function getStats(): Promise<{ totalGuilds: number; totalModerated:
     totalGuilds: result[0].config_count || 0 as number,
     totalModerated: result[0].event_count || 0 as number,
   };
+}
+
+export async function getFullStats(): Promise<{ guilds: number; moderations: number; last7dModerations: number; last7dEngagedGuilds: number; dailyStats: { date: string; moderations: number; engagedGuilds: number; }[]; }> {
+  const result = await db`SELECT 
+    (SELECT COUNT(*) FROM honeypot_config) AS config_count, 
+    (SELECT COUNT(*) FROM honeypot_events) AS event_count,
+    (SELECT COUNT(*) FROM honeypot_events WHERE timestamp >= datetime('now', '-7 days')) AS last_7d_event_count,
+    (SELECT COUNT(DISTINCT guild_id) FROM honeypot_events WHERE timestamp >= datetime('now', '-7 days')) AS last_7d_engaged_guilds;
+  `;
+  const dailyStatsResult = await db`SELECT 
+      date(timestamp) as date, 
+      COUNT(*) as moderations, 
+      COUNT(DISTINCT guild_id) as engaged_guilds
+    FROM honeypot_events
+    WHERE timestamp >= datetime('now', '-14 days')
+      AND timestamp < date('now')
+    GROUP BY date(timestamp)
+    ORDER BY date(timestamp) ASC;
+  `;
+  return {
+    guilds: result[0].config_count || 0 as number,
+    moderations: result[0].event_count || 0 as number,
+    last7dModerations: result[0].last_7d_event_count || 0 as number,
+    last7dEngagedGuilds: result[0].last_7d_engaged_guilds || 0 as number,
+    dailyStats: dailyStatsResult.map((row: any) => ({
+      date: row.date,
+      moderations: row.moderations,
+      engagedGuilds: row.engaged_guilds,
+    })),
+  }
 }
 
 export async function getUserModeratedCount(user_id: string): Promise<number> {

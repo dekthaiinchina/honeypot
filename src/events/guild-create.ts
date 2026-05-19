@@ -50,6 +50,7 @@ const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
                 experiments: [],
             });
             if (redis) channelId && setSubscribedChannelCache(guild.id, [channelId], redis);
+            redis?.publish("guild_count", "");
             if (!setupSuccess && guild.system_channel_id) {
                 try {
                     await api.channels.createMessage(guild.system_channel_id, {

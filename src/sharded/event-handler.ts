@@ -35,6 +35,7 @@ const getRedis = (c?: Bun.RedisOptions) => new Bun.RedisClient(process.env.REDIS
 const redis = getRedis();
 // separate connection for blocking so it doesnt interfere with the main one
 const redisBlocking = getRedis({ connectionTimeout: 1000, maxRetries: 1 });
+const redisPubSub = getRedis();
 
 const rest = new REST().setToken(process.env.DISCORD_TOKEN!);
 const api = new API(rest);
@@ -48,7 +49,7 @@ const listen = async () => {
         messageEvents: { sendBotEvents: false },
     })
     redis.set("discord_ws_config", wsConfig)
-    redis.lpush("discord_ws_config_", wsConfig)
+    redis.publish("discord_ws_config", wsConfig)
 
     while (runLoop) try {
         if (currentlyRunning > 500) {
@@ -117,6 +118,7 @@ console.log("Event handler worker started.");
 
 // todo: consider this better because if this has replicas, then each instance will run the cron...
 if (process.env.REPLICA_ID === "1" || !process.env.REPLICA_ID) {
+    // redisPubSub.subscribe("", async (message) => {});
     runCrons(api, db, redis);
     api.applicationCommands.bulkOverwriteGlobalCommands(applicationId, commandsPayload).then((cmds) => {
         const commandIdMap = cmds.reduce((acc, cmd) => { acc[cmd.name] = cmd.id; return acc; }, {} as Record<string, string>);

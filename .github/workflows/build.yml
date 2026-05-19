@@ -43,6 +43,10 @@ jobs:
               # - package.json
               # - bun.lock
               # (if there is a meaningfull change to @discordjs/ws i'll manually trigger a build)
+            stats:
+              - Dockerfile.stats
+              - src/sharded/stats-api.ts
+              - src/utils/db.ts
 
   docker-build:
     name: Build Docker (${{ matrix.platform_suffix }})
@@ -116,6 +120,20 @@ jobs:
             GIT_SHA=${{ github.sha }}
           # cache-from: type=gha
           # cache-to: type=gha,mode=max
+      - name: "[stats Image] Build & push image"
+        uses: docker/build-push-action@v6
+        if: ${{ needs.changes.outputs.stats == 'true' || github.event_name == 'workflow_dispatch' }}
+        with:
+          context: .
+          file: ./Dockerfile.stats
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LOWER }}/honeypot-stats:${{ env.SHORT_SHA }}-${{ matrix.platform_suffix }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
 
   merge-docker-manifest:
     name: Deploy Docker
@@ -161,4 +179,12 @@ jobs:
             -t ghcr.io/$OWNER_LOWER/honeypot-ws:latest \
             ghcr.io/$OWNER_LOWER/honeypot-ws:${SHORT_SHA}-x64 \
             ghcr.io/$OWNER_LOWER/honeypot-ws:${SHORT_SHA}-arm64
+          fi
+
+          if [ "${{ needs.changes.outputs.stats }}" = 'true' ] || [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+          docker buildx imagetools create \
+            -t ghcr.io/$OWNER_LOWER/honeypot-stats:$SHORT_SHA \
+            -t ghcr.io/$OWNER_LOWER/honeypot-stats:latest \
+            ghcr.io/$OWNER_LOWER/honeypot-stats:${SHORT_SHA}-x64 \
+            ghcr.io/$OWNER_LOWER/honeypot-stats:${SHORT_SHA}-arm64
           fi
