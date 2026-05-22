@@ -246,14 +246,15 @@ const handler: EventHandler<GatewayDispatchEvents.InteractionCreate> = {
                             console.log("No previous honeypot message ID found to edit.");
                         }
                     } catch (err) {
-                        console.log(`Error creating/editing honeypot message (interaction handler): ${err}`);
                         if (err instanceof DiscordAPIError && (err.code == RESTJSONErrorCodes.MissingAccess || err.code == RESTJSONErrorCodes.MissingPermissions)) {
+                            console.log(styleText("dim", `Error creating/editing honeypot message (interaction handler): ${err}`));
                             await api.interactions.reply(interaction.id, interaction.token, {
                                 content: `I don't have access to the honeypot channel <#${newConfig.honeypot_channel_id}>. Please make sure I have access to that channel and try again (both View Channel and Send Messages permissions).\n-# No settings have been changed.`,
                                 allowed_mentions: {},
                                 flags: MessageFlags.Ephemeral,
                             });
                         } else {
+                            console.log(`Error creating/editing honeypot message (interaction handler): ${err}`);
                             await api.interactions.reply(interaction.id, interaction.token, {
                                 content: `There was a problem setting up the honeypot channel to <#${newConfig.honeypot_channel_id}>. Please check my permissions and try again.\n-# No settings have been changed.`,
                                 allowed_mentions: {},
@@ -492,13 +493,21 @@ const handler: EventHandler<GatewayDispatchEvents.InteractionCreate> = {
                             honeypotWarningMessage(guildModeratedCount, config.action, newMessages.warning_message)
                         );
                     } catch (err) {
-                        console.log(`Error updating honeypot warning message (interaction handler): ${err}`);
-                        await api.interactions.reply(interaction.id, interaction.token, {
-                            content: `There was a problem updating the honeypot warning message in <#${config.honeypot_channel_id}>. Please check my permissions.\n-# Your custom messages have not been saved.`,
-                            allowed_mentions: {},
-                            flags: MessageFlags.Ephemeral,
-                        });
-
+                        if (err instanceof DiscordAPIError && (err.code == RESTJSONErrorCodes.MissingAccess || err.code == RESTJSONErrorCodes.MissingPermissions)) {
+                            console.log(styleText('dim', `Error updating honeypot warning message (interaction handler): ${err}`));
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `I don't have access to the honeypot channel <#${config.honeypot_channel_id}> to update the warning message. Please make sure I have access to that channel and try again (both View Channel and Send Messages permissions).\n-# Your custom messages have not been saved.`,
+                                allowed_mentions: {},
+                                flags: MessageFlags.Ephemeral,
+                            });
+                        } else {
+                            console.log(`Error updating honeypot warning message (interaction handler): ${err}`);
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `There was a problem updating the honeypot warning message in <#${config.honeypot_channel_id}>. Please check my permissions.\n-# Your custom messages have not been saved.`,
+                                allowed_mentions: {},
+                                flags: MessageFlags.Ephemeral,
+                            });
+                        }
                         return
                     }
                 }
