@@ -1,10 +1,12 @@
-import { GatewayDispatchEvents, MessageReferenceType, type APIMessage } from "discord-api-types/v10";
+import { GatewayDispatchEvents, MessageReferenceType, RESTJSONErrorCodes, type APIMessage } from "discord-api-types/v10";
 import type { EventHandler } from "./events";
 import type { API } from "@discordjs/core";
 import type { API as API2 } from "@discordjs/core/http-only";
 import { getDmChannelCache, getGuildInfo, getSubscribedChannelCache, setDmChannelCache, setSubscribedChannelCache } from "../utils/cache";
 import { CUSTOM_EMOJI_ID } from "../utils/constants";
 import { honeypotUserDMMessage, honeypotWarningMessage, logActionMessage } from "../utils/messages";
+import { DiscordAPIError } from "@discordjs/rest";
+import { styleText } from "node:util";
 
 const handler: EventHandler<GatewayDispatchEvents.MessageCreate> = {
     event: GatewayDispatchEvents.MessageCreate,
@@ -108,13 +110,19 @@ const onMessage = async (
             }
         } catch (err) {
             /* Ignore DM errors (user has DMs closed, etc.) */
-            console.log(`Failed to send DM to user: ${err}`)
+            if (`${err}` === "AbortError: The operation was aborted." || `${err}` === "Error: Request aborted manually") {
+                console.log(styleText("dim", `Failed to send DM to user: ${err}`));
+            } else if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.CannotSendMessagesToThisUser || err.code === RESTJSONErrorCodes.CannotSendMessagesToThisUserDueToHavingNoMutualGuilds)) {
+                console.log(styleText("dim", `Failed to send DM to user: ${err}`));
+            } else {
+                console.log(`Failed to send DM to user: ${err}`)
+            }
         }
 
         // we prob will win the delete before the ban, so no point delaying the ban to wait for msg to create (and not the biggest deal if it fails)
         // if (forwardPromise) await forwardPromise;
 
-        let failed = false;
+        let failed: boolean | "permissions" | "owner" = false;
         if (!isOwner) try {
             if (config.action === 'ban') {
                 // Ban: permanent ban, delete last 1 hour of messages
@@ -162,11 +170,16 @@ const onMessage = async (
                 failed = true;
             }
         } catch (err) {
-            console.log(`Failed to ${config.action} user: ${err}`);
-            failed = true;
+            if (err instanceof DiscordAPIError && (err.code == RESTJSONErrorCodes.MissingPermissions)) {
+                console.log(styleText("dim", `Failed to ${config.action} user: ${err}`));
+                failed = "permissions";
+            } else {
+                console.log(`Failed to ${config.action} user: ${err}`);
+                failed = true;
+            }
         } else {
             // server owner cannot be banned/kicked by anyone
-            failed = true;
+            failed = "owner";
         };
         if (!failed && !isOwner) {
             await db.logModerateEvent(guildId, userId);
@@ -192,7 +205,15 @@ const onMessage = async (
             }
         } catch (err) {
             // somewhat chance the channel is deleted or the bot lost perms to send messages there
-            console.log(`Failed to send log message (MessageCreate handler): ${err}`);
+            if (err instanceof DiscordAPIError) {
+                if (err.code == RESTJSONErrorCodes.UnknownChannel && config.log_channel_id) {
+                    await db.unsetLogChannel(guildId, config.log_channel_id);
+                } else if (err.code == RESTJSONErrorCodes.MissingAccess || err.code == RESTJSONErrorCodes.MissingPermissions) {
+                    console.log(styleText("dim", `Failed to send log message (MessageCreate handler): ${err}`));
+                } else {
+                    console.log(`Failed to send log message (MessageCreate handler): ${err}`);
+                }
+            } else console.log(`Failed to send log message (MessageCreate handler): ${err}`);
         }
 
         if (config.honeypot_msg_id && !config.experiments.includes("no-warning-msg")) try {
@@ -202,7 +223,12 @@ const onMessage = async (
                 config.honeypot_msg_id,
                 honeypotWarningMessage(moderatedCount, config.action, customMessages?.warning_message)
             );
-        } catch (err) { console.log(`Failed to update honeypot message: ${err}`); }
+        } catch (err) {
+            if (err instanceof DiscordAPIError && err.code == RESTJSONErrorCodes.UnknownMessage) {
+                console.log(styleText("dim", `Failed to update honeypot message: ${err}`));
+                await db.unsetHoneypotMsg(guildId, config.honeypot_msg_id!);
+            } else console.log(`Failed to update honeypot message: ${err}`);
+        }
 
     } catch (err) {
         console.error(`Error with MessageCreate handler: ${err}`);

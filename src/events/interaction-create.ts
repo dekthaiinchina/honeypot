@@ -7,6 +7,7 @@ import getBadWords from "../utils/bad-words.macro" with { type: "macro" };
 import { CUSTOM_EMOJI, CUSTOM_EMOJI_ID } from "../utils/constants";
 import { getGuildInfo, removeFromDeleteMessageCache, setSubscribedChannelCache } from "../utils/cache";
 import { DiscordAPIError } from "@discordjs/rest";
+import { styleText } from "node:util";
 
 const hasPermission = (permissions: bigint, permission: bigint) => (permissions & permission) === permission;
 
@@ -246,11 +247,19 @@ const handler: EventHandler<GatewayDispatchEvents.InteractionCreate> = {
                         }
                     } catch (err) {
                         console.log(`Error creating/editing honeypot message (interaction handler): ${err}`);
-                        await api.interactions.reply(interaction.id, interaction.token, {
-                            content: `There was a problem setting up the honeypot channel to <#${newConfig.honeypot_channel_id}>. Please check my permissions and try again.\n-# No settings have been changed.`,
-                            allowed_mentions: {},
-                            flags: MessageFlags.Ephemeral,
-                        }).catch(() => null);
+                        if (err instanceof DiscordAPIError && (err.code == RESTJSONErrorCodes.MissingAccess || err.code == RESTJSONErrorCodes.MissingPermissions)) {
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `I don't have access to the honeypot channel <#${newConfig.honeypot_channel_id}>. Please make sure I have access to that channel and try again (both View Channel and Send Messages permissions).\n-# No settings have been changed.`,
+                                allowed_mentions: {},
+                                flags: MessageFlags.Ephemeral,
+                            });
+                        } else {
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `There was a problem setting up the honeypot channel to <#${newConfig.honeypot_channel_id}>. Please check my permissions and try again.\n-# No settings have been changed.`,
+                                allowed_mentions: {},
+                                flags: MessageFlags.Ephemeral,
+                            });
+                        }
                         return;
                     }
                 } else if (prevConfig?.honeypot_msg_id && prevConfig?.honeypot_channel_id) {
@@ -269,17 +278,26 @@ const handler: EventHandler<GatewayDispatchEvents.InteractionCreate> = {
                             allowed_mentions: {},
                         });
                     } catch (err) {
-                        console.log(`Error sending test message to log channel (interaction handler): ${err}`);
                         // clean up just created honeypot message if log channel fails (because user might think it's fully set up otherwise)
                         if (msgId) {
                             await api.channels.deleteMessage(newConfig.honeypot_channel_id, msgId, { reason: "Cleaning up honeypot message after log channel setup failure" }).catch(() => null);
                         }
 
-                        await api.interactions.reply(interaction.id, interaction.token, {
-                            content: `There was a problem sending test message to the log channel <#${newConfig.log_channel_id}>. Please check my permissions and try again.\n-# No settings have been changed.`,
-                            flags: MessageFlags.Ephemeral,
-                            allowed_mentions: {},
-                        });
+                        if (err instanceof DiscordAPIError && (err.code == RESTJSONErrorCodes.MissingAccess || err.code == RESTJSONErrorCodes.MissingPermissions)) {
+                            console.log(styleText('dim', `Error sending test message to log channel (interaction handler): ${err}`));
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `I don't have access to the log channel <#${newConfig.log_channel_id}>. Please make sure I have access to that channel and try again (both View Channel and Send Messages permissions).\n-# No settings have been changed.`,
+                                allowed_mentions: {},
+                                flags: MessageFlags.Ephemeral,
+                            });
+                        } else {
+                            console.log(`Error sending test message to log channel (interaction handler): ${err}`);
+                            await api.interactions.reply(interaction.id, interaction.token, {
+                                content: `There was a problem sending test message to the log channel <#${newConfig.log_channel_id}>. Please check my permissions and try again.\n-# No settings have been changed.`,
+                                flags: MessageFlags.Ephemeral,
+                                allowed_mentions: {},
+                            });
+                        }
                         return;
                     }
                 }
@@ -675,15 +693,13 @@ const handler: EventHandler<GatewayDispatchEvents.InteractionCreate> = {
                 try {
                     await api.guilds.unbanUser(guildId, userIdToUnban, { reason: `Unbanned by @${interaction.member.user.username} using the unban button in the honeypot log message` });
                 } catch (err) {
-                    if (err instanceof DiscordAPIError) {
-                        if (err.code === RESTJSONErrorCodes.UnknownBan) {
-                            await api.interactions.reply(interaction.id, interaction.token, {
-                                content: "This user is not currently banned.",
-                                allowed_mentions: {},
-                                flags: MessageFlags.Ephemeral,
-                            });
-                            return;
-                        }
+                    if (err instanceof DiscordAPIError && err.code === RESTJSONErrorCodes.UnknownBan) {
+                        await api.interactions.reply(interaction.id, interaction.token, {
+                            content: "This user is not currently banned.",
+                            allowed_mentions: {},
+                            flags: MessageFlags.Ephemeral,
+                        });
+                        return;
                     }
 
                     console.log(`Error unbanning user: ${err}`);

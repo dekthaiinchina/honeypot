@@ -1,4 +1,4 @@
-import { ButtonStyle, ChannelType, GatewayDispatchEvents, MessageFlags, ComponentType, type GatewayGuildCreateDispatchData, type APIRole, PermissionFlagsBits } from "discord-api-types/v10";
+import { ButtonStyle, ChannelType, GatewayDispatchEvents, MessageFlags, ComponentType, type GatewayGuildCreateDispatchData, type APIRole, PermissionFlagsBits, RESTJSONErrorCodes } from "discord-api-types/v10";
 import type { EventHandler } from "./events";
 import type { API } from "@discordjs/core";
 import type { API as API2 } from "@discordjs/core/http-only";
@@ -6,6 +6,7 @@ import { honeypotWarningMessage } from "../utils/messages";
 import { addToDeleteMessageCache, getCommandIdCache, removeFromDeleteMessageCache, setGuildInfoCache, setSubscribedChannelCache } from "../utils/cache";
 import randomChannelNames from "../utils/random-channel-names.yaml";
 import { getRoleMemberCounts } from "../utils/discord-api";
+import { DiscordAPIError } from "@discordjs/rest";
 
 const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
     event: GatewayDispatchEvents.GuildCreate,
@@ -26,7 +27,7 @@ const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
             try {
                 const { id: channId, new: isNewChannel } = await findOrCreateHoneypotChannel(api, guild);
                 channelId = channId;
-                msgId = await postWarning(api, channelId, applicationId, "softban", await db.getModeratedCount(guild.id));
+                msgId = await postWarning(api, channelId, applicationId, "softban", 0);
                 setupSuccess = true;
                 if (isNewChannel) {
                     sendIntroMessage(api, redis, channelId)
@@ -39,6 +40,11 @@ const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
                         .catch((err) => console.log(`Failed to check setup and send warning msg: ${err}`))
                 }
             } catch (err) {
+                if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.UnknownChannel)) {
+                    channelId = null;
+                    msgId = null;
+                    setupSuccess = false;
+                }
                 console.log(`Failed to create/send honeypot message: ${err}`);
             }
             await db.setConfig({

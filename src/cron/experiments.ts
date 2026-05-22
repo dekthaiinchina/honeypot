@@ -1,9 +1,11 @@
 import type { API } from "@discordjs/core";
 import type { API as API2 } from "@discordjs/core/http-only";
-import { MessageFlags } from "discord-api-types/v10";
+import { MessageFlags, RESTJSONErrorCodes } from "discord-api-types/v10";
 import randomChannelNames from "../utils/random-channel-names.yaml";
 import { CUSTOM_EMOJI } from "../utils/constants";
 import type { Cron } from "./crons";
+import { DiscordAPIError } from "@discordjs/rest";
+import { styleText } from "node:util";
 
 
 export async function channelWarmerExperiment(api: API | API2, guildId: string, channelId: string) {
@@ -64,7 +66,11 @@ const cron: Cron = {
                         content: `⚠️ There was a problem sending a message to the <#${config.honeypot_channel_id}> channel for the "Channel Warmer" experiment. Please check my permissions.`,
                         allowed_mentions: {},
                     }).catch(err => {
-                        console.log(`Failed to send failed message for channel warmer experiment: ${err}`);
+                        if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.MissingAccess || err.code === RESTJSONErrorCodes.MissingPermissions)) {
+                            console.log(styleText("dim", `Failed to send failed message for channel warmer experiment: ${err}`));
+                        } else {
+                            console.log(`Failed to send failed message for channel warmer experiment: ${err}`);
+                        }
                     });
                 }
             }
@@ -89,7 +95,11 @@ const cron: Cron = {
                         content: `⚠️ There was a problem updating the <#${config.honeypot_channel_id}> channel for the "Random Channel Name" experiment. Please check my permissions.`,
                         allowed_mentions: {},
                     }).catch(err => {
-                        console.log(`Failed to send failed message for random channel name experiment: ${err}`);
+                        if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.MissingAccess || err.code === RESTJSONErrorCodes.MissingPermissions)) {
+                            console.log(styleText("dim", `Failed to send failed message for random channel name experiment: ${err}`));
+                        } else {
+                            console.log(`Failed to send failed message for random channel name experiment: ${err}`);
+                        }
                     });
                 }
             }
