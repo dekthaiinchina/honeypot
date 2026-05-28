@@ -122,7 +122,7 @@ const onMessage = async (
         // we prob will win the delete before the ban, so no point delaying the ban to wait for msg to create (and not the biggest deal if it fails)
         // if (forwardPromise) await forwardPromise;
 
-        let failed: boolean | "permissions" | "owner" = false;
+        let failed: boolean | "permissions" | "owner" | "unban" = false;
         if (!isOwner) try {
             if (config.action === 'ban') {
                 // Ban: permanent ban, delete last 1 hour of messages
@@ -138,40 +138,44 @@ const onMessage = async (
                     guildId,
                     userId,
                     { delete_message_seconds: 3600 },
-                    { reason: "Triggered honeypot -> softban (kick) 1/4" }
+                    { reason: "Triggered honeypot -> softban (kick) 1/2" }
                 );
-                // await Bun.sleep(150)
-                // await api.guilds.unbanUser(
-                //     guildId,
-                //     userId,
-                //     { reason: "Triggered honeypot -> softban (kick) 2/4" }
-                // );
+                try {
+                    await api.guilds.unbanUser(
+                        guildId,
+                        userId,
+                        { reason: "Triggered honeypot -> softban (kick) 2/2" }
+                    );
+                } catch (err) {
+                    console.log(`Failed to unban user after ban: ${err}`);
+                    failed = "unban";
+                }
 
                 // https://github.com/discord/discord-api-docs/issues/8360
                 // sometimes banning doesn't actually remove messages - maybe doing it again later helps
-                (async () => {
-                    await Bun.sleep(10_000)
-                    // put it here instead of above because they may join back too early and get kicked again which isn't any good
-                    await api.guilds.unbanUser(
-                        guildId,
-                        userId,
-                        { reason: "Triggered honeypot -> softban (kick) 2/4" }
-                    );
-                    
-                    await api.guilds.banUser(
-                        guildId,
-                        userId,
-                        { delete_message_seconds: 3600 },
-                        { reason: "Triggered honeypot -> softban (kick) 3/4", signal: AbortSignal.timeout(25_000) }
-                    );
-                    await api.guilds.unbanUser(
-                        guildId,
-                        userId,
-                        { reason: "Triggered honeypot -> softban (kick) 4/4", signal: AbortSignal.timeout(25_000) }
-                    );
-                })().catch(err =>
-                    console.log(`Failed to double softban user (probably not an issue): ${err}`)
-                );
+                // (async () => {
+                //     await Bun.sleep(10_000)
+                //     // put it here instead of above because they may join back too early and get kicked again which isn't any good
+                //     await api.guilds.unbanUser(
+                //         guildId,
+                //         userId,
+                //         { reason: "Triggered honeypot -> softban (kick) 2/4" }
+                //     );
+
+                //     await api.guilds.banUser(
+                //         guildId,
+                //         userId,
+                //         { delete_message_seconds: 3600 },
+                //         { reason: "Triggered honeypot -> softban (kick) 3/4", signal: AbortSignal.timeout(25_000) }
+                //     );
+                //     await api.guilds.unbanUser(
+                //         guildId,
+                //         userId,
+                //         { reason: "Triggered honeypot -> softban (kick) 4/4", signal: AbortSignal.timeout(25_000) }
+                //     );
+                // })().catch(err =>
+                //     console.log(`Failed to double softban user (probably not an issue): ${err}`)
+                // );
             } else {
                 console.error("Unknown action in honeypot config:", config.action);
                 failed = true;
@@ -203,6 +207,12 @@ const onMessage = async (
                     content: `⚠️ User <@${userId}> triggered the honeypot, but they are the **server owner** so I cannot ${config.action} them.\n-# In anycase **ensure my role is higher** than people’s highest role and that I have **ban members** permission so I can ${config.action} for actual cases.`,
                     // allowed_mentions: {},
                 });
+            } else if (failed === "unban" && config.action === "softban") {
+                await api.channels.createMessage(config.log_channel_id || config.honeypot_channel_id, {
+                    content: `⚠️ User <@${userId}> triggered the honeypot, but I failed to **fully** softban them.\n-# They may still be banned but you can manually unban them in server settings.`,
+                    allowed_mentions: {},
+                });
+                await emojiReact;
             } else if (failed) {
                 await api.channels.createMessage(config.log_channel_id || config.honeypot_channel_id, {
                     content: `⚠️ User <@${userId}> triggered the honeypot, but I **failed** to ${config.action} them.\n-# Please check my permissions to **ensure my role is higher** than their highest role and that I have **ban members** permission.`,
