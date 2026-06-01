@@ -83,6 +83,7 @@ export function honeypotUserDMMessage(action: HoneypotConfig["action"], guildNam
                 content: customText
                   ?.replace(/\{\{action(:text)?\}\}/g, actionText)
                   .replace(/\{\{server:name\}\}/g, guildNameFormatted)
+                  .replace(/\{\{server:name:\}\}/g, guildName)
                   .replace(/\{\{honeypot:channel:link\}\}/g, link)
                   || `## Honeypot Triggered\n\nYou have been **${actionText}** from **${guildNameFormatted}** for sending a message in the [honeypot](${link}) channel.`
               },
