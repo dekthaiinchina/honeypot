@@ -23,12 +23,16 @@ const redis = getRedis();
 const redisPubSub = getRedis();
 const rest = new REST().setToken(token!);
 
+// if this is resumed, then it is ignored and will use the old resume setting
+// but in next reshard it will use the new setting
+const useCompression = process.env.COMPRESS_WEBSOCKETS === "true";
+
 const getShards = async () => (await rest.get(Routes.gatewayBot()) as RESTGetAPIGatewayBotResult).shards;
-const getManager = (shards: number, sessionCache: Map<number, SessionInfo> = new Map()) => new WebSocketManager({
+const getManager = (shards: number, sessionCache: Map<number, SessionInfo> = new Map(), compression: boolean = false) => new WebSocketManager({
     token: token,
     intents: GatewayIntentBits.Guilds | GatewayIntentBits.GuildMessages,
     rest,
-    compression: process.env.COMPRESS_WEBSOCKETS === "true" ? CompressionMethod.ZlibNative : null,
+    compression: compression ? CompressionMethod.ZlibNative : null,
     shardCount: shards,
     initialPresence,
     retrieveSessionInfo: (shardId) => sessionCache.get(shardId) ?? null,
@@ -39,31 +43,32 @@ const getManager = (shards: number, sessionCache: Map<number, SessionInfo> = new
 const managerState = "a" // update this when initial presense or intents changes (ie require shards to reconnect)
 
 const sessionInfoCache: Record<number, Map<number, SessionInfo>> = {};
-async function getSessionStorageFromRedis(shardCount: number) {
-    const _raw = await redis.hmget("discord_ws_sessions", `${managerState}_${shardCount}`, shardCount.toString());
-    const raw = _raw[0] || _raw[1];
+async function getSessionStorageFromRedis(shardCount: number, preferCompression = false) {
+    const _raw = await redis.hmget("discord_ws_sessions", `Z_${managerState}_${shardCount}`, `${managerState}_${shardCount}`, shardCount.toString());
+    const raw = preferCompression ? (_raw[0] || _raw[1] || _raw[2]) : (_raw[1] || _raw[2] || _raw[0]);
     if (raw) {
         const data = JSON.parse(raw) as Record<string, SessionInfo>;
-        return new Map(Object.entries(data).map(([k, v]) => [parseInt(k), v]));
+        return { session: new Map(Object.entries(data).map(([k, v]) => [parseInt(k), v])), compression: _raw[0] === raw };
     }
     return null;
 }
-async function saveSessionStorageToRedis(shardCount: number, sessionStorage: Map<number, SessionInfo>) {
+async function saveSessionStorageToRedis(shardCount: number, sessionStorage: Map<number, SessionInfo>, compression: boolean = false) {
     const obj = Object.fromEntries(sessionStorage);
     const threeMinSecs = 3 * 60;
-    await redis.hsetex("discord_ws_sessions", "EX", threeMinSecs, "FIELDS", 1, `${managerState}_${shardCount}`, JSON.stringify(obj));
+    await redis.hsetex("discord_ws_sessions", "EX", threeMinSecs, "FIELDS", 1, `${compression ? 'Z_' : ''}${managerState}_${shardCount}`, JSON.stringify(obj));
 }
 
 let shardCount = await getShards();
-sessionInfoCache[shardCount] = await getSessionStorageFromRedis(shardCount) ?? new Map();
-let manager = getManager(shardCount, sessionInfoCache[shardCount]);
+const initialResumeCache = await getSessionStorageFromRedis(shardCount, useCompression);
+sessionInfoCache[shardCount] = initialResumeCache?.session ?? new Map();
+let manager = getManager(shardCount, sessionInfoCache[shardCount], initialResumeCache?.compression);
 let isResharding = null as null | [WebSocketManager, number /* shard count */];
 let reshardedId = 0;
 
 const onExit = async (type: string) => {
     console.log(`Received ${type}, shutting down...`);
     const possibleSessionCache = sessionInfoCache[shardCount];
-    if (possibleSessionCache) await saveSessionStorageToRedis(shardCount, possibleSessionCache).catch((err) => {
+    if (possibleSessionCache) await saveSessionStorageToRedis(shardCount, possibleSessionCache, manager.options.compression === CompressionMethod.ZlibNative).catch((err) => {
         console.error(`Error saving session storage to Redis on shutdown: ${err}`);
     });
     process.exit(0);
@@ -138,10 +143,10 @@ function shouldBroadcastEvent(event: GatewayDispatchPayload): boolean | Promise<
 }
 
 // every day recheck if shard count has increased, if so make them run both at same time for a bit to hopefully avoid downtime, then kill old one
-const checkForResharding = async () => {
+const checkForResharding = async (force = false) => {
     try {
         const newShardCount = (await getShards());
-        if (newShardCount > shardCount) {
+        if (newShardCount > shardCount || force) {
             console.info(`\nShard count increased from ${shardCount} to ${newShardCount}, resharding...`);
 
             if (isResharding) {
@@ -155,7 +160,7 @@ const checkForResharding = async () => {
             }
 
             let shardsConnected = new Set<number>();
-            const newManager = getManager(newShardCount, (sessionInfoCache[newShardCount] ??= new Map()));
+            const newManager = getManager(newShardCount, (sessionInfoCache[newShardCount] ??= new Map()), useCompression);
             isResharding = [newManager, newShardCount];
             function dispatchEvent2(event: GatewayDispatchPayload, shardId: number) {
                 if (event.t === GatewayDispatchEvents.Ready) {
@@ -186,7 +191,6 @@ const checkForResharding = async () => {
             delete sessionInfoCache[shardCount]
             shardCount = newShardCount;
             isResharding = null;
-
         }
     } catch (err) {
         console.error(`Error checking shard count: ${err}`);
@@ -202,4 +206,8 @@ await manager.connect();
 
 setInterval(checkForResharding, 12 * 60 * 60 * 1000); // twice every day
 
-
+if (initialResumeCache && initialResumeCache.compression !== useCompression) {
+    // wait 20mins to not overload the server with payloads if there was a compression setting change since last session info save
+    Bun.sleep(20 * 60_000)
+        .then(() => checkForResharding(true))
+}
