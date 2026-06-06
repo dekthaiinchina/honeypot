@@ -82,13 +82,14 @@ const onMessage = async (
         //     }).catch(err => console.log(`Failed to forward message to log channel: ${err}`));
         // }
 
-        let timepotPromise = null as null | Promise<any>;
+        let timeoutPromise = null as null | Promise<any>;
         if (config.experiments.includes("timeout-first")) {
             // intentionally not awaited as in theory we can do DM and this at same time (and avoid extra wait-time)
-            timepotPromise = api.guilds.editMember(guildId, userId,
-                { communication_disabled_until: new Date(Date.now() + 3600000).toISOString() },
+            timeoutPromise = api.guilds.editMember(guildId, userId,
+                { communication_disabled_until: new Date(Date.now() + 3600).toISOString() },
                 { reason: "Triggered honeypot -> timeout for 1hr before ban/softban" }
-            ).catch(err => console.log(`Failed to forward message to log channel: ${err}`));
+            ).then(() => Bun.sleep(50))
+                .catch(err => console.log(`Failed to timeout user before ban/softban: ${err}`));
         }
 
         const customMessages = await db.getHoneypotMessages(guildId);
@@ -132,7 +133,7 @@ const onMessage = async (
 
         // we prob will win the delete before the ban, so no point delaying the ban to wait for msg to create (and not the biggest deal if it fails)
         // if (forwardPromise) await forwardPromise;
-        if (timepotPromise) await Promise.race([timepotPromise, Bun.sleep(1000)]); // if timeout fails, we don't want to wait too long before banning
+        if (timeoutPromise) await Promise.race([timeoutPromise, Bun.sleep(1000)]); // if timeout fails, we don't want to wait too long before banning
 
         let failed: boolean | "permissions" | "owner" | "unban" = false;
         if (!isOwner) try {
