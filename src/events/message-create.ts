@@ -87,9 +87,9 @@ const onMessage = async (
             // intentionally not awaited as in theory we can do DM and this at same time (and avoid extra wait-time)
             timeoutPromise = api.guilds.editMember(guildId, userId,
                 { communication_disabled_until: new Date(Date.now() + 3600).toISOString() },
-                { reason: "Triggered honeypot -> timeout for 1hr before ban/softban" }
+                { reason: `Triggered honeypot -> timeout for 1hr before ${config.action}`, signal: AbortSignal.timeout(3000) }
             ).then(() => Bun.sleep(50))
-                .catch(err => console.log(`Failed to timeout user before ban/softban: ${err}`));
+                .catch(err => console.log(`Failed to timeout user before ${config.action}: ${err}`));
         }
 
         const customMessages = await db.getHoneypotMessages(guildId);
