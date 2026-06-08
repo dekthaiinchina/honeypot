@@ -224,12 +224,11 @@ const onMessage = async (
         const moderatedCount = await db.getModeratedCount(guildId);
 
         try {
-            const reply = (messageId && channelId === config.honeypot_channel_id) ? {
-                message_id: messageId,
-                channel_id: channelId,
-                fail_if_not_exists: false,
-                guild_id: guildId
-            } satisfies RESTAPIMessageReference : undefined;
+            // const reply = (messageId && channelId === config.honeypot_channel_id) ? {
+            //     message_id: messageId,
+            //     fail_if_not_exists: false,
+            // } satisfies RESTAPIMessageReference : undefined;
+            const reply = undefined as RESTAPIMessageReference | undefined;
 
             if (config.log_channel_id && !failed && !isOwner) {
                 await api.channels.createMessage(config.log_channel_id, {
