@@ -33,7 +33,7 @@ export function honeypotWarningMessage(
             accessory: {
               type: ComponentType.Thumbnail,
               media: {
-                url: "https://raw.githubusercontent.com/microsoft/fluentui-emoji/refs/heads/main/assets/Honey%20pot/3D/honey_pot_3d.png"
+                url: "https://honeypot.riskymh.dev/honeypot.png"
               }
             }
           },
@@ -98,7 +98,7 @@ export function honeypotUserDMMessage(action: HoneypotConfig["action"], guildNam
             accessory: {
               type: ComponentType.Thumbnail,
               media: {
-                url: "https://raw.githubusercontent.com/microsoft/fluentui-emoji/refs/heads/main/assets/Honey%20pot/3D/honey_pot_3d.png"
+                url: "https://honeypot.riskymh.dev/honeypot.png"
               }
             }
           }

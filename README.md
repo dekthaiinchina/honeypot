@@ -1,7 +1,7 @@
 
 <h1 align="center">
   <a href="https://discord.com/discovery/applications/1450060292716494940" target="_blank">
-    <img src="https://raw.githubusercontent.com/microsoft/fluentui-emoji/refs/heads/main/assets/Honey%20pot/3D/honey_pot_3d.png" alt="Honey Pot Emoji" width="84">
+    <img src="https://honeypot.riskymh.dev/honeypot.png" alt="Honey Pot Emoji" width="84">
   </a>
   <br>
   Honeypot Discord Bot
@@ -16,7 +16,7 @@
 3. Configure the admin log channel and action (kick or ban) using the `/honeypot` command.
 4. Ensure the bot’s highest role is above any self-assignable (color/ping) roles.
 5. Any user posting in the honeypot channel will be banned or removed, and the action will be logged.
-> **Note:** Kick is default and is a softban (bans & unbans) so Discord deletes their immediate messages 
+> [**ⓘ**](https://honeypot.riskymh.dev/docs/setup-guide) **Note:** Kick is default and is a softban (bans & unbans) so Discord deletes their immediate messages 
 
 <details>
 <summary><strong>Extra info</strong></summary>
@@ -29,18 +29,21 @@ Spammers and compromised accounts often target all channels at once, especially 
 
 ### Experiments
 
-Options you can enable to avoid the bots better
+Options you can enable to avoid the bots better [**ⓘ**](https://honeypot.riskymh.dev/docs/configuration#experiments)
 
 1. **Channel Warmer:** Keep the honeypot channel active (every day)
-1. **Random Channel Name:** Randomize the honeypot channel name (every day)
-1. **Random Channel Name (chaos):** Randomize the honeypot channel name with random characters (every day)
-1. **No Warning Msg:** Don’t include a warning message in the #honeypot channel
-1. **No DM:** Don’t DM the user that they triggered the honeypot
-1. **Reinvite:** In DM message include a link to be able to rejoin
+2. **Random Channel Name:** Randomize the honeypot channel name (every day)
+3. **Random Channel Name (chaos):** Randomize the honeypot channel name with random characters (every day)
+4. **No Warning Msg:** Don’t include a warning message in the #honeypot channel
+5. **No DM:** Don’t DM the user that they triggered the honeypot
+6. **Reinvite:** In DM message include a link to be able to rejoin
+7. **Timeout First:** Before banning/kicking, timeout user for 1hr (will persist when they rejoin)
+8. **Only More Recent Delete:** Instead of deleting last 1hr, only do 15min
+9. **Many Honeypots:** Create multiple honeypot channels to increase chances of usage
 
 ### Tips to Maximize Honeypot Bot’s Effectiveness
 
-For best results, position your *#honeypot* channel near the top of your server list - recent spam bots often target the first few channels available. Consider renaming the *trap channel* to something less predictable, like *#pls-dont-chat-here*, to avoid automated bots that blacklist *"honeypot"* by name. Always ensure the bot’s role is ranked above standard member roles; this ensures it has the authority to remove problematic accounts. Explore the experimental features for additional defenses against evolving bot tactics, and enjoy a cleaner, safer community - so you can say goodbye to unwanted bots! 🎉
+[**ⓘ**](https://honeypot.riskymh.dev/docs/tips) For best results, position your *#honeypot* channel near the top of your server list - recent spam bots often target the first few channels available. Consider renaming the *trap channel* to something less predictable, like *#pls-dont-chat-here*, to avoid automated bots that blacklist *"honeypot"* by name. Always ensure the bot’s role is ranked above standard member roles; this ensures it has the authority to remove problematic accounts. Explore the experimental features for additional defenses against evolving bot tactics, and enjoy a cleaner, safer community - so you can say goodbye to unwanted bots! 🎉
 
 </details>
 
@@ -60,6 +63,6 @@ $ bun start # or `bun dev`
 
 * [Railway Template](https://railway.com/deploy/honeypot?referralCode=risky&utm_medium=integration&utm_source=template&utm_campaign=generic)
 * `bun run start`
-* `docker compose up -d` (using `ghcr.io/riskymh/honeypot:latest`)
+* `docker compose up -d` (using `ghcr.io/riskymh/honeypot`)
 
 Or you can just use my hosted version by inviting it to your server: [Invite Link](https://discord.com/oauth2/authorize?client_id=1450060292716494940)
