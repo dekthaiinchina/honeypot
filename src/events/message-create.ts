@@ -104,7 +104,7 @@ const onMessage = async (
             ).then(() => Bun.sleep(50))
                 .catch(err => {
                     if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.MissingPermissions)) {
-                        console.log(`Failed to timeout user before ${config.action}: ${err}`);
+                        console.log(styleText("dim", `Failed to timeout user before ${config.action}: ${err}`));
                     } else {
                         console.log(`Failed to timeout user before ${config.action}: ${err}`);
                     }

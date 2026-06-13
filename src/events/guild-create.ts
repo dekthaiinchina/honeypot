@@ -8,6 +8,7 @@ import randomChannelNames from "../utils/random-channel-names.yaml";
 import { getRoleMemberCounts } from "../utils/discord-api";
 import { DiscordAPIError } from "@discordjs/rest";
 import lookalikeChars from "../utils/lookalike-chars.yaml";
+import { styleText } from "node:util";
 
 const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
     event: GatewayDispatchEvents.GuildCreate,
@@ -41,12 +42,17 @@ const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
                         .catch((err) => console.log(`Failed to check setup and send warning msg: ${err}`))
                 }
             } catch (err) {
-                if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.UnknownChannel)) {
+                setupSuccess = false;
+                const discordErr = err instanceof DiscordAPIError ? err : null;
+                if (discordErr && (discordErr.code === RESTJSONErrorCodes.UnknownChannel)) {
                     channelId = null;
                     msgId = null;
-                    setupSuccess = false;
+                    console.log(styleText("dim", `Failed to create/send honeypot message: ${err}`));
+                } else if (discordErr && (discordErr.code === RESTJSONErrorCodes.MissingPermissions || discordErr.code === RESTJSONErrorCodes.MissingAccess)) {
+                    console.log(styleText("dim", `Failed to create/send honeypot message: ${err}`));
+                } else {
+                    console.log(`Failed to create/send honeypot message: ${err}`);
                 }
-                console.log(`Failed to create/send honeypot message: ${err}`);
             }
             await db.setConfig({
                 guild_id: guild.id,
@@ -66,7 +72,11 @@ const handler: EventHandler<GatewayDispatchEvents.GuildCreate> = {
                         allowed_mentions: {}
                     });
                 } catch (err) {
-                    console.log(`Failed to send welcome/setup message: ${err}`);
+                    if (err instanceof DiscordAPIError && (err.code === RESTJSONErrorCodes.MissingAccess || err.code === RESTJSONErrorCodes.MissingPermissions)) {
+                        console.log(styleText("dim", `Failed to send welcome/setup message (due to failed to make channel): ${err}`));
+                    } else {
+                        console.log(`Failed to send welcome/setup message (due to failed to make channel): ${err}`);
+                    }
                 }
             }
         } catch (err) {
